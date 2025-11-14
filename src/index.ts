@@ -1,0 +1,129 @@
+#!/usr/bin/env node
+import * as dotenv from 'dotenv';
+dotenv.config();
+
+import express, { Response, Request } from "express";
+import cors from "cors";
+import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js"; // Removed McpServerConfig import
+import { SSEServerTransport } from "@modelcontextprotocol/sdk/server/sse.js";
+import https from 'https';
+import fs from 'fs';
+
+// Define a simple TestMcpServer directly in this file
+class TestMcpServer extends McpServer {
+  // Explicitly declare the transport property to satisfy TypeScript
+  public transport: SSEServerTransport | undefined;
+
+  constructor() {
+    // Define the config object inline or as a type alias if needed
+    const config = { // Using an inferred type for config
+      name: 'mcp-server-test', // Unique name for the test server
+      version: '1.0.0', // A version number is required
+      tools: [], // No tools to register for this test server
+    };
+    super(config);
+  }
+
+  async connect(transport: SSEServerTransport): Promise<void> {
+    this.transport = transport;
+    console.log('Test MCP Server connected.');
+  }
+
+  async disconnect(): Promise<void> {
+    console.log('Test MCP Server disconnected.');
+    this.transport = undefined;
+  }
+}
+
+const test_mcp_server = new TestMcpServer();
+let test_mcp_transport: SSEServerTransport;
+
+// 创建 Express 应用
+const app = express();
+const PORT = 2000; // Fixed port as requested
+const hostName = 'webserver01.hopax.com.tw'; // Fixed hostname as requested
+
+// HTTPS 证书和私钥路径
+const privateKeyPath = './certs/server.key';
+const certificatePath = './certs/server.crt';
+
+// 启用 CORS 和 JSON 解析
+app.use(cors());
+app.use(express.json());
+
+// Utility functions for SSE and Message handling, adapted from mcp_web.ts
+async function set_see(transport: SSEServerTransport, server: McpServer, res: Response){
+    try {
+        console.log('start sse!');
+        res.setHeader('Access-Control-Allow-Origin', '*');
+        res.setHeader('Access-Control-Allow-Headers', '*');
+        await server.connect(transport);
+            console.log('MCP 服务器已通过 SSE 连接');
+        } 
+    catch (error) {
+        console.error('SSE 连接失败:', error);
+        res.end();
+    }
+}
+
+async function set_message(transport: SSEServerTransport, req: Request, res: Response){
+    try {
+        if (!transport) {
+            return res.status(400).json({ error: 'SSE 尚未建立' });
+        }
+        console.log('📨 收到消息请求:', {
+            method: req.method,
+            headers: req.headers,
+            body: req.body,
+        });
+
+        await transport.handleMessage(req.body);
+        res.status(200).end();
+    }
+    catch (error) {
+        console.error('處理訊息失敗:', error);
+        res.status(500).json({ error: '處理訊息失敗' });
+    }
+}
+
+// MCP Test Server SSE and Message routes
+app.get('/mcp/test_mcp_sse', async (req, res) => {
+  console.log('新的 Test MCP SSE 连接建立');
+  test_mcp_transport = new SSEServerTransport('/mcp/test_message', res);
+  set_see(test_mcp_transport, test_mcp_server, res);
+});
+
+app.post('/mcp/test_mcp_message', async (req, res) => {
+  set_message(test_mcp_transport, req, res);
+});
+
+// 启动服务器
+async function startServer() {
+  try {
+    const privateKey = fs.readFileSync(privateKeyPath, 'utf8');
+    const certificate = fs.readFileSync(certificatePath, 'utf8');
+    const credentials = { key: privateKey, cert: certificate };
+
+    const httpsServer = https.createServer(credentials, app);
+
+    httpsServer.listen(PORT, () => {
+      console.log(`MCP Test Server running on HTTPS port ${PORT}`);
+      console.log(`Test MCP SSE Endpoint: https://${hostName}:${PORT}/mcp/test_mcp_sse`);
+      console.log(`Test MCP Message Endpoint: https://${hostName}:${PORT}/mcp/test_mcp_message`);
+    });
+  } catch (error) {
+    console.error('启动 HTTPS 服务器失败:', error);
+    console.log('请确保 server.key 和 server.cert 文件存在于项目根目录中。');
+  }
+}
+
+startServer(); // Call the async function to start the server
+
+// 错误处理
+process.on('uncaughtException', (error) => {
+  console.error('未捕获的异常:', error);
+});
+
+process.on('unhandledRejection', (reason, promise) => {
+  console.error('未处理的 Promise 拒绝:', reason);
+});
