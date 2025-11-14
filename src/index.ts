@@ -7,32 +7,27 @@ import cors from "cors";
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js"; // Removed McpServerConfig import
 import { SSEServerTransport } from "@modelcontextprotocol/sdk/server/sse.js";
 // Define a simple TestMcpServer directly in this file
-class TestMcpServer extends McpServer {
-  // Explicitly declare the transport property to satisfy TypeScript
-  public transport: SSEServerTransport | undefined;
+const server = new McpServer({
+  name: "mcp-test2",
+  version: "1.0.0",
+});
+server.tool(
+  "hollo-world",
+  "hollo world",
+  {
+  },
+  async () => {
+    return {
+            content:[
+                {
+                    type: "text",
+                    text: "Hello, world!!"
+                }
+            ]
+        }
+});
 
-  constructor() {
-    // Define the config object inline or as a type alias if needed
-    const config = { // Using an inferred type for config
-      name: 'mcp-server-test', // Unique name for the test server
-      version: '1.0.0', // A version number is required
-      tools: [], // No tools to register for this test server
-    };
-    super(config);
-  }
-
-  async connect(transport: SSEServerTransport): Promise<void> {
-    this.transport = transport;
-    console.log('Test MCP Server connected.');
-  }
-
-  async disconnect(): Promise<void> {
-    console.log('Test MCP Server disconnected.');
-    this.transport = undefined;
-  }
-}
-
-const test_mcp_server = new TestMcpServer();
+const test_mcp_server = server;
 let test_mcp_transport: SSEServerTransport;
 
 // 创建 Express 应用
@@ -81,7 +76,7 @@ async function set_message(transport: SSEServerTransport, req: Request, res: Res
 // MCP Test Server SSE and Message routes
 app.get('/mcp/test_mcp_sse', async (req, res) => {
   console.log('新的 Test MCP SSE 连接建立');
-  test_mcp_transport = new SSEServerTransport('/mcp/test_message', res);
+  test_mcp_transport = new SSEServerTransport('/mcp/test_mcp_message', res);
   set_see(test_mcp_transport, test_mcp_server, res);
 });
 
