@@ -6,9 +6,6 @@ import express, { Response, Request } from "express";
 import cors from "cors";
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js"; // Removed McpServerConfig import
 import { SSEServerTransport } from "@modelcontextprotocol/sdk/server/sse.js";
-import https from 'https';
-import fs from 'fs';
-
 // Define a simple TestMcpServer directly in this file
 class TestMcpServer extends McpServer {
   // Explicitly declare the transport property to satisfy TypeScript
@@ -40,12 +37,7 @@ let test_mcp_transport: SSEServerTransport;
 
 // 创建 Express 应用
 const app = express();
-const PORT = 2000; // Fixed port as requested
-const hostName = 'webserver01.hopax.com.tw'; // Fixed hostname as requested
-
-// HTTPS 证书和私钥路径
-const privateKeyPath = './certs/server.key';
-const certificatePath = './certs/server.crt';
+const PORT = process.env.PORT || 3000; // 从环境变量获取端口，或使用默认值 3000
 
 // 启用 CORS 和 JSON 解析
 app.use(cors());
@@ -98,26 +90,11 @@ app.post('/mcp/test_mcp_message', async (req, res) => {
 });
 
 // 启动服务器
-async function startServer() {
-  try {
-    const privateKey = fs.readFileSync(privateKeyPath, 'utf8');
-    const certificate = fs.readFileSync(certificatePath, 'utf8');
-    const credentials = { key: privateKey, cert: certificate };
-
-    const httpsServer = https.createServer(credentials, app);
-
-    httpsServer.listen(PORT, () => {
-      console.log(`MCP Test Server running on HTTPS port ${PORT}`);
-      console.log(`Test MCP SSE Endpoint: https://${hostName}:${PORT}/mcp/test_mcp_sse`);
-      console.log(`Test MCP Message Endpoint: https://${hostName}:${PORT}/mcp/test_mcp_message`);
-    });
-  } catch (error) {
-    console.error('启动 HTTPS 服务器失败:', error);
-    console.log('请确保 server.key 和 server.cert 文件存在于项目根目录中。');
-  }
-}
-
-startServer(); // Call the async function to start the server
+app.listen(PORT, () => {
+  console.log(`MCP Test Server running on HTTP port ${PORT}`);
+  console.log(`Test MCP SSE Endpoint: http://localhost:${PORT}/mcp/test_mcp_sse`);
+  console.log(`Test MCP Message Endpoint: http://localhost:${PORT}/mcp/test_mcp_message`);
+});
 
 // 错误处理
 process.on('uncaughtException', (error) => {
